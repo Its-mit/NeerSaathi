@@ -1,5 +1,14 @@
+
+import React from "react";
 import { Stack } from "expo-router";
+import { AuthProvider } from "./context/AuthContext";
+import { StatusBar } from "expo-status-bar";
 
 export default function RootLayout() {
-  return <Stack />;
+  return (
+    <AuthProvider>
+      <StatusBar style="auto" />
+      <Stack screenOptions={{ headerShadowVisible: false }} />
+    </AuthProvider>
+  );
 }
