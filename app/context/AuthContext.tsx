@@ -15,6 +15,7 @@ type User = {
 };
 
 type AuthState = {
+  role: string;
   user: User | null;
   token: string | null;
   location: { latitude: number; longitude: number } | null;
@@ -48,7 +49,7 @@ function safeUuid() {
 }
 
 export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
-  const [state, setState] = useState<AuthState>({ user: null, token: null, location: null, isLoading: true });
+  const [state, setState] = useState<AuthState>({ role: "", user: null, token: null, location: null, isLoading: true });
 
   useEffect(() => {
     (async () => {
@@ -58,9 +59,9 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         const locStr = await AsyncStorage.getItem(LOCATION_KEY);
         const profile = profileStr ? (JSON.parse(profileStr) as User) : null;
         const loc = locStr ? JSON.parse(locStr) : null;
-        setState({ user: profile, token: token, location: loc, isLoading: false });
+        setState({ role: profile?.role ?? "", user: profile, token: token, location: loc, isLoading: false });
       } catch (e) {
-        setState({ user: null, token: null, location: null, isLoading: false });
+        setState({ role: "", user: null, token: null, location: null, isLoading: false });
       }
     })();
   }, []);
@@ -103,7 +104,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     await AsyncStorage.removeItem(PROFILE_KEY);
     await AsyncStorage.removeItem(TOKEN_KEY);
     // keep location stored or remove? we'll keep for this demo
-    setState({ user: null, token: null, location: null, isLoading: false });
+    setState({ role: "", user: null, token: null, location: null, isLoading: false });
   };
 
   const requestLocation = async () => {

@@ -51,8 +51,10 @@ export default function Signup() {
 
       <View style={{ height: 12 }} />
       <Button title="Create account" onPress={onSignup} />
-      <View style={{ height: 8 }} />
-      <Button title="Back to Login" onPress={() => router.replace("/(auth)/login")} />
+      <TouchableOpacity onPress={() => router.push("/(auth)/login")} style={{ marginTop: 15 }}>
+  <Text style={{ textAlign: "center", color: "#2563eb" }}>I have an account? Login</Text>
+</TouchableOpacity>
+
     </KeyboardAvoidingView>
   );
 }
