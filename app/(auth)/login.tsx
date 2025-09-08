@@ -1,155 +1,104 @@
-
-import React, { useMemo, useState } from "react";
-import { View, Text, Pressable, Switch, Alert, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
+// app/(auth)/login.tsx
+import React, { useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, Button, Alert, Modal, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
 import { useRouter } from "expo-router";
-import TextField from "../components/TextField";
-import RoleSelector from "../components/RoleSelector";
-import { useAuth, Role, UserType } from "../context/AuthContext";
+import { useAuth, Role } from "../context/AuthContext";
 
-const isEmail = (v: string) => /.+@.+\..+/.test(v);
-const isPhone = (v: string) => /^\d{10}$/.test(v.replace(/\D/g, ""));
-const isAadhaar = (v: string) => /^\d{12}$/.test(v.replace(/\D/g, ""));
+const ROLES: Role[] = ["Farmer", "Household", "Industry", "Researcher"];
 
-export default function LoginScreen() {
+export default function Login() {
+  const auth = useAuth();
   const router = useRouter();
-  const { signIn, requestLocation, setUserType } = useAuth();
-  const [role, setRole] = useState<Role>("user");
-  const [locationOn, setLocationOn] = useState<boolean>(false);
 
-  // Admin fields
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminMobile, setAdminMobile] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
+  const [identifier, setIdentifier] = useState(""); // email or phone
+  const [password, setPassword] = useState("");
+  const [aadhaar, setAadhaar] = useState("");
+  const [role, setRole] = useState<Role | "">("");
+  const [showModal, setShowModal] = useState(false);
 
-  // Researcher fields
-  const [resEmail, setResEmail] = useState("");
-  const [resPhone, setResPhone] = useState("");
-  const [resPassword, setResPassword] = useState("");
-
-  // User fields
-  const [userMobile, setUserMobile] = useState("");
-  const [userEmail, setUserEmail] = useState("");
-  const [userAadhaar, setUserAadhaar] = useState("");
-  const [userPassword, setUserPassword] = useState("");
-  const [userType, setUserTypeLocal] = useState<UserType>(null);
-
-  const locationToggle = async (value: boolean) => {
-    setLocationOn(value);
-    if (value) {
-      const ok = await requestLocation();
-      if (!ok) Alert.alert("Location permission denied", "You can continue, but area-wise data will be limited.");
-    }
+  const requestLocationFlow = async () => {
+    setShowModal(false);
+    const ok = await auth.requestLocation();
+    if (!ok) Alert.alert("Location required", "You must allow location access to log in.");
+    else Alert.alert("Location allowed");
   };
 
-  const ready = useMemo(() => {
-    if (role === "admin") {
-      return isEmail(adminEmail) && isPhone(adminMobile) && adminPassword.length >= 6;
-    }
-    if (role === "researcher") {
-      return isEmail(resEmail) && isPhone(resPhone) && resPassword.length >= 6;
-    }
-    // user
-    return isPhone(userMobile) && isEmail(userEmail) && isAadhaar(userAadhaar) && userPassword.length >= 6 && !!userType;
-  }, [role, adminEmail, adminMobile, adminPassword, resEmail, resPhone, resPassword, userMobile, userEmail, userAadhaar, userPassword, userType]);
-
-  const onSubmit = async () => {
+  const onLogin = async () => {
     try {
-      if (role === "admin") {
-        await signIn({ role, data: { email: adminEmail, mobile: adminMobile, password: adminPassword } });
-        router.replace("/(admin)");
-      } else if (role === "researcher") {
-        await signIn({ role, data: { email: resEmail, phone: resPhone, password: resPassword } });
-        router.replace("/(research)");
-      } else {
-        if (!userType) return;
-        setUserType(userType);
-        await signIn({ role, data: { mobile: userMobile, email: userEmail, aadhaar: userAadhaar, password: userPassword, userType } });
-        router.replace("/(user)");
-      }
+      if (!role) return Alert.alert("Please select your role");
+      if (!identifier) return Alert.alert("Enter your email or phone as identifier");
+      if (!password || password.length < 6) return Alert.alert("Password must be at least 6 characters");
+      if (!auth.state.location) return Alert.alert("Please allow location access");
+      await auth.signIn(identifier, password);
+      // optionally you could save role server-side; for now we keep role selected locally
+      router.replace("/(user)/home");
     } catch (e: any) {
-      Alert.alert("Login failed", e?.message ?? "Something went wrong");
+      Alert.alert("Login failed", e.message || "Invalid credentials");
     }
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 60 }}>
-          <Text style={{ fontSize: 28, fontWeight: "700", marginBottom: 8 }}>NeerSaathi</Text>
-          <Text style={{ fontSize: 16, color: "#4b5563", marginBottom: 16 }}>Groundwater level monitoring and guidance</Text>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.container}>
+      <Text style={styles.title}>Login</Text>
 
-          <RoleSelector role={role} setRole={setRole} />
+      <TextInput style={styles.input} placeholder="Email or Phone" value={identifier} onChangeText={setIdentifier} keyboardType="email-address" />
+      <TextInput style={styles.input} placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} />
+      <TextInput style={styles.input} placeholder="Aadhaar (optional)" keyboardType="number-pad" value={aadhaar} onChangeText={setAadhaar} />
 
-          {role === "admin" && (
-            <View style={{ marginTop: 12 }}>
-              <TextField label="Email" value={adminEmail} onChangeText={setAdminEmail} placeholder="admin@example.com" keyboardType="email-address" autoCapitalize="none" />
-              <TextField label="Mobile (10 digits)" value={adminMobile} onChangeText={setAdminMobile} placeholder="9876543210" keyboardType="phone-pad" />
-              <TextField label="Password (min 6 chars)" value={adminPassword} onChangeText={setAdminPassword} placeholder="••••••••" secureTextEntry />
+      <Text style={styles.sectionTitle}>Select Role</Text>
+      <View style={styles.roleRow}>
+        {ROLES.map((r) => {
+          const selected = r === role;
+          return (
+            <TouchableOpacity key={r} style={[styles.roleBtn, selected && styles.roleBtnActive]} onPress={() => setRole(r)}>
+              <Text style={[styles.roleText, selected && styles.roleTextActive]}>{r}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View style={{ height: 12 }} />
+
+      {/* location toggle button (opens modal explanation) */}
+      <TouchableOpacity style={[styles.locationBtn, auth.state.location ? styles.locationBtnActive : {}]} onPress={() => setShowModal(true)}>
+        <Text style={{ color: "#fff", fontWeight: "700" }}>{auth.state.location ? "Location Captured ✓" : "Allow Location"}</Text>
+      </TouchableOpacity>
+
+      <View style={{ height: 12 }} />
+      <Button title="Login" onPress={onLogin} disabled={!role || !auth.state.location} />
+
+      <View style={{ height: 8 }} />
+      <Button title="Create account" onPress={() => router.push("/(auth)/signup")} />
+
+      <Modal transparent visible={showModal} animationType="slide">
+        <View style={styles.modalWrap}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Allow Location</Text>
+            <Text style={{ marginBottom: 14 }}>NeerSaathi needs your location to show groundwater & climate data for your area.</Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <Button title="Cancel" onPress={() => setShowModal(false)} />
+              <Button title="Allow" onPress={requestLocationFlow} />
             </View>
-          )}
-
-          {role === "researcher" && (
-            <View style={{ marginTop: 12 }}>
-              <TextField label="Email" value={resEmail} onChangeText={setResEmail} placeholder="researcher@example.com" keyboardType="email-address" autoCapitalize="none" />
-              <TextField label="Phone (10 digits)" value={resPhone} onChangeText={setResPhone} placeholder="9876543210" keyboardType="phone-pad" />
-              <TextField label="Password (min 6 chars)" value={resPassword} onChangeText={setResPassword} placeholder="••••••••" secureTextEntry />
-            </View>
-          )}
-
-          {role === "user" && (
-            <View style={{ marginTop: 12 }}>
-              <TextField label="Mobile (10 digits)" value={userMobile} onChangeText={setUserMobile} placeholder="9876543210" keyboardType="phone-pad" />
-              <TextField label="Email" value={userEmail} onChangeText={setUserEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" />
-              <TextField label="Aadhaar (12 digits)" value={userAadhaar} onChangeText={setUserAadhaar} placeholder="123412341234" keyboardType="number-pad" />
-              <TextField label="Password (min 6 chars)" value={userPassword} onChangeText={setUserPassword} placeholder="••••••••" secureTextEntry />
-
-              <View style={{ marginTop: 6, flexDirection: "row", gap: 8 }}>
-                {(["farmer", "resident", "industry"] as const).map((t) => (
-                  <Pressable
-                    key={t}
-                    onPress={() => setUserTypeLocal(t)}
-                    style={{
-                      paddingVertical: 8,
-                      paddingHorizontal: 12,
-                      borderRadius: 999,
-                      borderWidth: 1,
-                      borderColor: userType === t ? "#059669" : "#d1d5db",
-                      backgroundColor: userType === t ? "#d1fae5" : "#fff",
-                    }}
-                  >
-                    <Text style={{ fontWeight: "600", color: userType === t ? "#047857" : "#374151" }}>{t[0].toUpperCase() + t.slice(1)}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          )}
-
-          <View style={{ marginTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <Switch value={locationOn} onValueChange={locationToggle} />
-              <Text>Allow location access</Text>
-            </View>
-            <Pressable
-              onPress={onSubmit}
-              disabled={!ready}
-              style={{
-                paddingVertical: 12,
-                paddingHorizontal: 18,
-                borderRadius: 12,
-                backgroundColor: ready ? "#2563eb" : "#93c5fd",
-              }}
-            >
-              <Text style={{ color: "#fff", fontWeight: "700" }}>Continue</Text>
-            </Pressable>
-          </View>
-
-          <View style={{ marginTop: 28 }}>
-            <Text style={{ color: "#6b7280", fontSize: 12 }}>
-              By continuing, you agree to our Terms and acknowledge the Privacy Policy.
-            </Text>
           </View>
         </View>
-      </ScrollView>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 20, justifyContent: "center", backgroundColor: "#fff" },
+  title: { fontSize: 28, fontWeight: "700", marginBottom: 12, textAlign: "center" },
+  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, padding: 12, marginBottom: 10 },
+  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 8 },
+  roleRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  roleBtn: { borderWidth: 1, borderColor: "#cbd5e1", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginRight: 8, marginBottom: 8 },
+  roleBtnActive: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
+  roleText: {},
+  roleTextActive: { color: "#fff", fontWeight: "700" },
+  locationBtn: { backgroundColor: "#2563eb", padding: 12, borderRadius: 8, alignItems: "center" },
+  locationBtnActive: { backgroundColor: "#059669" },
+  modalWrap: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
+  modalBox: { width: "85%", backgroundColor: "#fff", padding: 18, borderRadius: 12 },
+  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
+});
